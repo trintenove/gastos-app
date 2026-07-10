@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>Meus Gastos</title>
+  <meta name="theme-color" content="#2e4f4f">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon-192.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <style>
+    :root {
+      --bg: #f4f6f5; --card: #ffffff; --ink: #1c2626; --muted: #6b7a7a;
+      --brand: #2e4f4f; --brand-ink: #ffffff; --chip: #e7edec;
+      --ok: #1e7d43; --bad: #c0392b;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #131a1a; --card: #1d2727; --ink: #ecf2f1; --muted: #93a5a3;
+        --brand: #6fb3a8; --brand-ink: #0e1616; --chip: #2a3737;
+        --ok: #6fd095; --bad: #ff8a7a;
+      }
+    }
+    * { box-sizing: border-box; margin: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg); color: var(--ink);
+      min-height: 100vh; padding: 16px;
+      padding-top: calc(16px + env(safe-area-inset-top));
+      display: flex; justify-content: center;
+    }
+    main { width: 100%; max-width: 420px; }
+    .card {
+      background: var(--card); border-radius: 16px; padding: 18px;
+      box-shadow: 0 1px 6px rgba(0,0,0,.08);
+    }
+    #saldo-card { text-align: center; margin-bottom: 14px; position: relative; }
+    #saldo-label { font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    #saldo { font-size: 2rem; font-weight: 800; margin: 4px 0; }
+    #saldo.pos { color: var(--ok); }
+    #saldo.neg { color: var(--bad); }
+    #saldo-detalhe { font-size: .85rem; color: var(--muted); }
+    #config-btn {
+      position: absolute; top: 10px; right: 12px; border: none;
+      background: none; font-size: 1.1rem; cursor: pointer; color: var(--muted);
+    }
+    .tipo { display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+            background: var(--chip); border-radius: 12px; padding: 4px; }
+    .tipo button {
+      padding: 10px; border: none; border-radius: 9px; background: transparent;
+      color: var(--muted); font-size: 1rem; font-weight: 700; cursor: pointer;
+    }
+    .tipo button.sel-gasto { background: var(--bad); color: #fff; }
+    .tipo button.sel-entrada { background: var(--ok); color: #fff; }
+    label { display: block; font-size: .8rem; color: var(--muted); margin: 14px 2px 6px; }
+    .valor-wrap { display: flex; align-items: baseline; gap: 8px; }
+    .valor-wrap span { font-size: 1.3rem; color: var(--muted); }
+    #valor {
+      flex: 1; font-size: 2.2rem; font-weight: 700; border: none;
+      border-bottom: 2px solid var(--chip); background: transparent;
+      color: var(--ink); padding: 4px 0; outline: none; width: 100%;
+    }
+    #valor:focus { border-color: var(--brand); }
+    .chips { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .chips button {
+      padding: 12px 8px; border: none; border-radius: 10px;
+      background: var(--chip); color: var(--ink); font-size: .95rem;
+      cursor: pointer;
+    }
+    .chips button.sel { background: var(--brand); color: var(--brand-ink); font-weight: 700; }
+    input[type=text], input[type=url] {
+      width: 100%; padding: 10px 12px; border: 1px solid var(--chip);
+      border-radius: 10px; background: transparent; color: var(--ink);
+      font-size: 1rem; outline: none;
+    }
+    .botao {
+      width: 100%; margin-top: 20px; padding: 15px; border: none;
+      border-radius: 12px; background: var(--brand); color: var(--brand-ink);
+      font-size: 1.1rem; font-weight: 700; cursor: pointer;
+    }
+    .botao:disabled { opacity: .55; }
+    #msg { text-align: center; margin-top: 14px; font-size: .95rem; min-height: 1.4em; }
+    #msg.ok { color: var(--ok); }
+    #msg.erro { color: var(--bad); }
+    #config-panel p { font-size: .85rem; color: var(--muted); margin: 8px 2px; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+<main>
+  <div class="card" id="saldo-card">
+    <button id="config-btn" title="Configurações">⚙️</button>
+    <div id="saldo-label">Saldo do mês</div>
+    <div id="saldo">—</div>
+    <div id="saldo-detalhe">carregando…</div>
+  </div>
+
+  <!-- painel de configuração (primeira vez / engrenagem) -->
+  <div class="card hidden" id="config-panel">
+    <p><b>Configuração</b> — feita uma vez, fica salva neste aparelho.</p>
+    <label for="cfg-url">URL do Apps Script (termina em /exec)</label>
+    <input type="url" id="cfg-url" placeholder="https://script.google.com/macros/s/…/exec">
+    <label for="cfg-token">Token</label>
+    <input type="text" id="cfg-token" placeholder="cole o token do Code.gs">
+    <button class="botao" id="cfg-salvar">Salvar configuração</button>
+  </div>
+
+  <div class="card" id="form-panel">
+    <div class="tipo">
+      <button type="button" id="btn-gasto">💸 Gasto</button>
+      <button type="button" id="btn-entrada">💰 Entrada</button>
+    </div>
+
+    <label for="valor">Valor</label>
+    <div class="valor-wrap"><span>R$</span>
+      <input id="valor" inputmode="decimal" placeholder="0,00" autocomplete="off">
+    </div>
+
+    <label>Categoria</label>
+    <div class="chips" id="chips"></div>
+
+    <label for="descricao">Descrição (opcional)</label>
+    <input type="text" id="descricao" placeholder="ex.: almoço com a galera" autocomplete="off">
+
+    <button class="botao" id="salvar">Salvar</button>
+    <div id="msg"></div>
+  </div>
+</main>
+
+<script>
+  const EXPENSE_CATS = ["Mercado", "Alimentação", "Transporte", "Casa",
+                        "Saúde", "Lazer", "Assinaturas", "Outros"];
+  const INCOME_CATS = ["Salário", "Freela", "Investimentos", "Outros"];
+  const MESES = ["janeiro","fevereiro","março","abril","maio","junho","julho",
+                 "agosto","setembro","outubro","novembro","dezembro"];
+
+  let tipo = "Gasto";
+  let categoria = null;
+
+  const $ = id => document.getElementById(id);
+  const brl = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+  // ----- configuração (URL + token ficam só neste aparelho) -----
+  const cfg = {
+    get url() { return localStorage.getItem('gastos_url') || ''; },
+    get token() { return localStorage.getItem('gastos_token') || ''; },
+    save(url, token) {
+      localStorage.setItem('gastos_url', url.trim());
+      localStorage.setItem('gastos_token', token.trim());
+    },
+    get ok() { return this.url.startsWith('https://') && this.token.length > 0; },
+  };
+
+  function showConfig(show) {
+    $('config-panel').classList.toggle('hidden', !show);
+    $('form-panel').classList.toggle('hidden', show);
+    if (show) { $('cfg-url').value = cfg.url; $('cfg-token').value = cfg.token; }
+  }
+  $('config-btn').addEventListener('click', () => showConfig(true));
+  $('cfg-salvar').addEventListener('click', () => {
+    cfg.save($('cfg-url').value, $('cfg-token').value);
+    if (!cfg.ok) return alert('Preencha a URL (https://…/exec) e o token.');
+    showConfig(false);
+    loadSummary();
+  });
+
+  // ----- comunicação com o Apps Script -----
+  async function api(payload) {
+    payload.token = cfg.token;
+    const res = await fetch(cfg.url, {
+      method: 'POST',
+      // text/plain evita o "preflight" CORS, que o Apps Script não responde
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'erro desconhecido');
+    return data;
+  }
+
+  // ----- interface -----
+  function renderChips() {
+    const cats = tipo === "Entrada" ? INCOME_CATS : EXPENSE_CATS;
+    $('chips').innerHTML = '';
+    categoria = null;
+    cats.forEach(c => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = c;
+      b.addEventListener('click', () => {
+        document.querySelectorAll('#chips button').forEach(x => x.classList.remove('sel'));
+        b.classList.add('sel');
+        categoria = c;
+      });
+      $('chips').appendChild(b);
+    });
+  }
+
+  function setTipo(t) {
+    tipo = t;
+    $('btn-gasto').className = t === "Gasto" ? "sel-gasto" : "";
+    $('btn-entrada').className = t === "Entrada" ? "sel-entrada" : "";
+    $('salvar').textContent = t === "Entrada" ? "Salvar entrada" : "Salvar gasto";
+    renderChips();
+  }
+  $('btn-gasto').addEventListener('click', () => setTipo("Gasto"));
+  $('btn-entrada').addEventListener('click', () => setTipo("Entrada"));
+
+  function renderSummary(s) {
+    const [ano, mes] = s.mes.split('-');
+    $('saldo-label').textContent = 'Saldo de ' + MESES[Number(mes) - 1] + ' de ' + ano;
+    $('saldo').textContent = brl(s.saldo);
+    $('saldo').className = s.saldo >= 0 ? 'pos' : 'neg';
+    $('saldo-detalhe').textContent =
+      '↑ ' + brl(s.entradas) + '  ·  ↓ ' + brl(s.gastos) +
+      '  ·  mês anterior ' + brl(s.anterior);
+  }
+
+  function showMsg(text, cls) { $('msg').textContent = text; $('msg').className = cls; }
+
+  async function loadSummary() {
+    if (!cfg.ok) return;
+    try {
+      renderSummary(await api({ action: 'summary' }));
+    } catch (err) {
+      $('saldo-detalhe').textContent = 'erro ao carregar saldo: ' + err.message;
+    }
+  }
+
+  $('salvar').addEventListener('click', async () => {
+    const raw = $('valor').value.trim();
+    const valor = parseFloat(raw.replace(/\./g, '').replace(',', '.'));
+    if (!valor || valor <= 0) return showMsg('Digite um valor válido.', 'erro');
+    if (!categoria) return showMsg('Escolha uma categoria.', 'erro');
+
+    $('salvar').disabled = true;
+    showMsg('Salvando…', '');
+    try {
+      const res = await api({
+        action: 'add', tipo: tipo, valor: valor,
+        categoria: categoria, descricao: $('descricao').value,
+      });
+      showMsg('✓ Salvo!', 'ok');
+      renderSummary(res);
+      $('valor').value = '';
+      $('descricao').value = '';
+      renderChips();
+    } catch (err) {
+      showMsg('Erro: ' + err.message, 'erro');
+    }
+    $('salvar').disabled = false;
+  });
+
+  // ----- inicialização -----
+  setTipo("Gasto");
+  if (!cfg.ok) showConfig(true); else loadSummary();
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) loadSummary();
+  });
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+</script>
+</body>
+</html>
